@@ -46,10 +46,22 @@ void Memory::free_static(void *p_ptr) {
 	internal::gdn_interface->mem_free(p_ptr);
 }
 
+_GlobalNil::_GlobalNil() {
+	left = this;
+	right = this;
+	parent = this;
+}
+
+_GlobalNil _GlobalNilClass::_nil;
+
 } // namespace godot
 
 void *operator new(size_t p_size, const char *p_description) {
 	return godot::Memory::alloc_static(p_size);
+}
+
+void *operator new(size_t p_size, void *(*p_allocfunc)(size_t p_size)) {
+	return p_allocfunc(p_size);
 }
 
 using namespace godot;
@@ -69,4 +81,5 @@ void operator delete(void *p_mem, void *p_pointer, size_t check, const char *p_d
 	ERR_PRINT("Call to placement delete should not happen.");
 	CRASH_NOW();
 }
+
 #endif
