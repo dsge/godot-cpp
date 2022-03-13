@@ -623,7 +623,9 @@ def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_cl
     # Move constructor.
     result.append(f"{class_name}::{class_name}({class_name} &&other) {{")
     if needs_copy_instead_of_move(class_name) and copy_constructor_index >= 0:
-        result.append(f"\tinternal::_call_builtin_constructor(_method_bindings.constructor_{copy_constructor_index}, &opaque, &other);")
+        result.append(
+            f"\tinternal::_call_builtin_constructor(_method_bindings.constructor_{copy_constructor_index}, &opaque, &other);"
+        )
     else:
         result.append("\tstd::swap(opaque, other.opaque);")
     result.append("}")
@@ -707,7 +709,7 @@ def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_cl
                     (encode, arg_name) = get_encoded_arg("other", operator["right_type"], None)
                     result += encode
                     result.append(
-                        f'\treturn internal::_call_builtin_operator_ptr<{correct_type(operator["return_type"])}>(_method_bindings.operator_{get_operator_id_name(operator["name"])}_{operator["right_type"]}, (const GDNativeTypePtr)&opaque, (const GDNativeTypePtr){arg_name});'
+                        f'\treturn internal::_call_builtin_operator_ptr<{get_gdnative_type(correct_type(operator["return_type"]))}>(_method_bindings.operator_{get_operator_id_name(operator["name"])}_{operator["right_type"]}, (const GDNativeTypePtr)&opaque, (const GDNativeTypePtr){arg_name});'
                     )
                     result.append("}")
                 else:
@@ -715,7 +717,7 @@ def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_cl
                         f'{correct_type(operator["return_type"])} {class_name}::operator{operator["name"].replace("unary", "")}() const {{'
                     )
                     result.append(
-                        f'\treturn internal::_call_builtin_operator_ptr<{correct_type(operator["return_type"])}>(_method_bindings.operator_{get_operator_id_name(operator["name"])}, (const GDNativeTypePtr)&opaque, (const GDNativeTypePtr)nullptr);'
+                        f'\treturn internal::_call_builtin_operator_ptr<{get_gdnative_type(correct_type(operator["return_type"]))}>(_method_bindings.operator_{get_operator_id_name(operator["name"])}, (const GDNativeTypePtr)&opaque, (const GDNativeTypePtr)nullptr);'
                     )
                     result.append("}")
                 result.append("")
@@ -741,7 +743,9 @@ def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_cl
     # Move assignment.
     result.append(f"{class_name} &{class_name}::operator=({class_name} &&other) {{")
     if needs_copy_instead_of_move(class_name) and copy_constructor_index >= 0:
-        result.append(f"\tinternal::_call_builtin_constructor(_method_bindings.constructor_{copy_constructor_index}, &opaque, &other);")
+        result.append(
+            f"\tinternal::_call_builtin_constructor(_method_bindings.constructor_{copy_constructor_index}, &opaque, &other);"
+        )
     else:
         result.append("\tstd::swap(opaque, other.opaque);")
     result.append("\treturn *this;")
@@ -1099,7 +1103,7 @@ def generate_engine_class_source(class_api, used_classes, fully_used_classes, us
                     return_type = method["return_value"]["type"]
                     meta_type = method["return_value"]["meta"] if "meta" in method["return_value"] else None
                     if is_pod_type(return_type) or is_variant(return_type) or is_enum(return_type):
-                        method_call += f"return internal::_call_native_mb_ret<{correct_type(return_type, meta_type)}>(___method_bind, _owner"
+                        method_call += f"return internal::_call_native_mb_ret<{get_gdnative_type(correct_type(return_type, meta_type))}>(___method_bind, _owner"
                     elif is_refcounted(return_type):
                         method_call += f"return Ref<{return_type}>::___internal_constructor(internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _owner"
                         is_ref = True
@@ -1327,7 +1331,7 @@ def generate_utility_functions(api, output_dir):
                 if function["return_type"] == "Object":
                     function_call += "internal::_call_utility_ret_obj(___function"
                 else:
-                    function_call += f'internal::_call_utility_ret<{correct_type(function["return_type"])}>(___function'
+                    function_call += f'internal::_call_utility_ret<{get_gdnative_type(correct_type(function["return_type"]))}>(___function'
             else:
                 function_call += "internal::_call_utility_no_ret(___function"
 
@@ -1626,6 +1630,7 @@ def is_packed_array(type_name):
         "PackedVector3Array",
     ]
 
+
 def needs_copy_instead_of_move(type_name):
     """
     Those are types which need initialised data or we'll get warning spam so need a copy instead of move.
@@ -1633,6 +1638,7 @@ def needs_copy_instead_of_move(type_name):
     return type_name in [
         "Dictionary",
     ]
+
 
 def is_enum(type_name):
     return type_name.startswith("enum::")
@@ -1719,7 +1725,13 @@ def correct_type(type_name, meta=None):
 
 def get_gdnative_type(type_name):
     type_conversion_map = {
-        "bool": "uint32_t",
+        "bool": "int8_t",
+        "uint8_t": "int64_t",
+        "int8_t": "int64_t",
+        "uint16_t": "int64_t",
+        "int16_t": "int64_t",
+        "uint32_t": "int64_t",
+        "int32_t": "int64_t",
         "int": "int64_t",
         "float": "double",
     }
