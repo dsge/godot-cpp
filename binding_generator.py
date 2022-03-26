@@ -870,13 +870,29 @@ def generate_engine_classes_bindings(api, output_dir, use_template_get_node):
         result.append(f"#ifndef {header_guard}")
         result.append(f"#define {header_guard}")
 
+        used_classes = []
+        expanded_format = native_struct["format"].replace("(", " ").replace(")", ";").replace(",", ";")
+        for field in expanded_format.split(";"):
+            field_type = field.strip().split(" ")[0].split("::")[0]
+            if field_type != "" and not is_included_type(field_type) and not is_pod_type(field_type):
+                if not field_type in used_classes:
+                    used_classes.append(field_type)
+
         result.append("")
+
+        for included in used_classes:
+            result.append(f"#include <godot_cpp/{get_include_path(included)}>")
+
+        if len(used_classes) > 0:
+            result.append("")
+
         result.append("namespace godot {")
         result.append("")
 
         result.append(f"struct {struct_name} {{")
-        for field in native_struct["format"].split(","):
-            result.append(f"\t{field};")
+        for field in native_struct["format"].split(";"):
+            if field != "":
+                result.append(f"\t{field};")
         result.append("};")
 
         result.append("")
@@ -1103,14 +1119,26 @@ def generate_engine_class_source(class_api, used_classes, fully_used_classes, us
                     return_type = method["return_value"]["type"]
                     meta_type = method["return_value"]["meta"] if "meta" in method["return_value"] else None
                     if is_pod_type(return_type) or is_variant(return_type) or is_enum(return_type):
-                        method_call += f"return internal::_call_native_mb_ret<{get_gdnative_type(correct_type(return_type, meta_type))}>(___method_bind, _owner"
+                        if method["is_static"]:
+                            method_call += f"return internal::_call_native_mb_ret<{get_gdnative_type(correct_type(return_type, meta_type))}>(___method_bind, nullptr"
+                        else:
+                            method_call += f"return internal::_call_native_mb_ret<{get_gdnative_type(correct_type(return_type, meta_type))}>(___method_bind, _owner"
                     elif is_refcounted(return_type):
-                        method_call += f"return Ref<{return_type}>::___internal_constructor(internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _owner"
+                        if method["is_static"]:
+                            method_call += f"return Ref<{return_type}>::___internal_constructor(internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _nullptr"
+                        else:
+                            method_call += f"return Ref<{return_type}>::___internal_constructor(internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _owner"
                         is_ref = True
                     else:
-                        method_call += f"return internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _owner"
+                        if method["is_static"]:
+                            method_call += f"return internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, nullptr"
+                        else:
+                            method_call += f"return internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _owner"
                 else:
-                    method_call += f"internal::_call_native_mb_no_ret(___method_bind, _owner"
+                    if method["is_static"]:
+                        method_call += f"internal::_call_native_mb_no_ret(___method_bind, nullptr"
+                    else:
+                        method_call += f"internal::_call_native_mb_no_ret(___method_bind, _owner"
 
                 if "arguments" in method:
                     method_call += ", "
@@ -1495,7 +1523,9 @@ def make_signature(
 
     function_signature += ")"
 
-    if "is_const" in function_data and function_data["is_const"]:
+    if "is_static" in function_data and function_data["is_static"] and for_header:
+        function_signature = "static " + function_signature
+    elif "is_const" in function_data and function_data["is_const"]:
         function_signature += " const"
 
     return function_signature
@@ -1582,10 +1612,15 @@ def is_pod_type(type_name):
     return type_name in [
         "Nil",
         "void",
-        "int",
-        "float",
         "bool",
+        "real_t",
+        "float",
         "double",
+        "int",
+        "int8_t",
+        "uint8_t",
+        "int16_t",
+        "uint16_t",
         "int32_t",
         "int64_t",
         "uint32_t",
@@ -1601,6 +1636,7 @@ def is_included_type(type_name):
         "AABB",
         "Basis",
         "Color",
+        "ObjectID",
         "Plane",
         "Quaternion",
         "Rect2",
@@ -1818,8 +1854,8 @@ header = """\
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2021 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2021 Godot Engine contributors (cf. AUTHORS.md).   */
+/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */

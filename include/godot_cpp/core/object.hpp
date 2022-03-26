@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2021 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2021 Godot Engine contributors (cf. AUTHORS.md).   */
+/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -133,6 +133,28 @@ MethodInfo::MethodInfo(const PropertyInfo &p_ret, const char *p_name, const Args
 		name(p_name), return_val(p_ret), flags(METHOD_FLAG_NORMAL) {
 	arguments = { args... };
 }
+
+class ObjectID {
+	uint64_t id = 0;
+
+public:
+	_FORCE_INLINE_ bool is_ref_counted() const { return (id & (uint64_t(1) << 63)) != 0; }
+	_FORCE_INLINE_ bool is_valid() const { return id != 0; }
+	_FORCE_INLINE_ bool is_null() const { return id == 0; }
+	_FORCE_INLINE_ operator uint64_t() const { return id; }
+	_FORCE_INLINE_ operator int64_t() const { return id; }
+
+	_FORCE_INLINE_ bool operator==(const ObjectID &p_id) const { return id == p_id.id; }
+	_FORCE_INLINE_ bool operator!=(const ObjectID &p_id) const { return id != p_id.id; }
+	_FORCE_INLINE_ bool operator<(const ObjectID &p_id) const { return id < p_id.id; }
+
+	_FORCE_INLINE_ void operator=(int64_t p_int64) { id = p_int64; }
+	_FORCE_INLINE_ void operator=(uint64_t p_uint64) { id = p_uint64; }
+
+	_FORCE_INLINE_ ObjectID() {}
+	_FORCE_INLINE_ explicit ObjectID(const uint64_t p_id) { id = p_id; }
+	_FORCE_INLINE_ explicit ObjectID(const int64_t p_id) { id = p_id; }
+};
 
 class ObjectDB {
 public:

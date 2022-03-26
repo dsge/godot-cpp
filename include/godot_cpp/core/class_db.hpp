@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2021 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2021 Godot Engine contributors (cf. AUTHORS.md).   */
+/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -155,10 +155,11 @@ void ClassDB::register_class() {
 		nullptr, // GDNativeExtensionClassNotification notification_func;
 		nullptr, // GDNativeExtensionClassToString to_string_func;
 		nullptr, // GDNativeExtensionClassReference reference_func;
-		nullptr, // GDNativeExtensionClassUnreference
+		nullptr, // GDNativeExtensionClassUnreference unreference_func;
 		T::create, // GDNativeExtensionClassCreateInstance create_instance_func; /* this one is mandatory */
 		T::free, // GDNativeExtensionClassFreeInstance free_instance_func; /* this one is mandatory */
 		&ClassDB::get_virtual_func, // GDNativeExtensionClassGetVirtual get_virtual_func;
+		nullptr, // GDNativeExtensionClassGetRID get_rid;
 		(void *)cl.name, // void *class_userdata;
 	};
 
