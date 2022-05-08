@@ -15,6 +15,13 @@ jobs:
             artifact-name: godot-cpp-linux-glibc2.27-x86_64-release
             artifact-path: bin/libgodot-cpp.linux.release.64.a
 
+          - name: 🐧 Linux (GCC, Double Precision)
+            os: ubuntu-18.04
+            platform: linux
+            artifact-name: godot-cpp-linux-glibc2.27-x86_64-double-release
+            artifact-path: bin/libgodot-cpp.linux.release.64.a
+            flags: float=64
+
           - name: 🏁 Windows (x86_64, MSVC)
             os: windows-2019
             platform: windows
@@ -179,7 +186,12 @@ jobs:
           sudo apt-get install -qq dos2unix recode clang-format-11
           sudo update-alternatives --remove-all clang-format
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-11 100
+          python -m pip install black==22.3.0
 
       - name: Style checks via clang-format
         run: |
           bash ./misc/scripts/clang_format.sh
+
+      - name: Python style checks via black (black_format.sh)
+        run: |
+          bash ./misc/scripts/black_format.sh

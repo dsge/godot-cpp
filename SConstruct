@@ -3,6 +3,7 @@
 import os
 import sys
 import subprocess
+from binding_generator import scons_generate_bindings, scons_emit_files
 
 if sys.version_info < (3,):
 
@@ -81,7 +82,7 @@ else:
 
 env = Environment(ENV=os.environ)
 
-is64 = sys.maxsize > 2 ** 32
+is64 = sys.maxsize > 2**32
 if (
     env["TARGET_ARCH"] == "amd64"
     or env["TARGET_ARCH"] == "emt64"
@@ -112,13 +113,7 @@ opts.Add(
 )
 opts.Add(PathVariable("custom_api_file", "Path to a custom JSON API file", None, PathVariable.PathIsFile))
 opts.Add(
-    EnumVariable(
-        "generate_bindings",
-        "Generate GDNative API bindings",
-        "auto",
-        allowed_values=["yes", "no", "auto", "true"],
-        ignorecase=2,
-    )
+    BoolVariable("generate_bindings", "Force GDExtension API bindings generation. Auto-detected by default.", False)
 )
 opts.Add(EnumVariable("android_arch", "Target Android architecture", "armv7", ["armv7", "arm64v8", "x86", "x86_64"]))
 opts.Add("macos_deployment_target", "macOS deployment target", "default")
@@ -144,6 +139,7 @@ opts.Add(
 opts.Add(BoolVariable("generate_template_get_node", "Generate a template version of the Node class's get_node.", True))
 
 opts.Add(BoolVariable("build_library", "Build the godot-cpp library.", True))
+opts.Add(EnumVariable("float", "Floating-point precision", "32", ("32", "64")))
 
 opts.Update(env)
 Help(opts.GenerateHelpText(env))
@@ -175,6 +171,9 @@ else:
 
 if env["target"] == "debug":
     env.Append(CPPDEFINES=["DEBUG_ENABLED", "DEBUG_METHODS_ENABLED"])
+
+if env["float"] == "64":
+    env.Append(CPPDEFINES=["REAL_T_IS_DOUBLE"])
 
 if env["platform"] == "linux" or env["platform"] == "freebsd":
     if env["use_llvm"]:
@@ -410,7 +409,12 @@ elif env["platform"] == "android":
         env.Append(CCFLAGS=["-O3"])
 
 elif env["platform"] == "javascript":
-    env["ENV"] = os.environ
+    if host_platform == "windows":
+        env = Environment(ENV=os.environ, tools=["cc", "c++", "ar", "link", "textfile", "zip"])
+        opts.Update(env)
+    else:
+        env["ENV"] = os.environ
+
     env["CC"] = "emcc"
     env["CXX"] = "em++"
     env["AR"] = "emar"
@@ -442,16 +446,8 @@ elif env["platform"] == "javascript":
     elif env["target"] == "release":
         env.Append(CCFLAGS=["-O3"])
 
-env.Append(
-    CPPPATH=[
-        ".",
-        env["headers_dir"],
-        "include",
-        "gen/include",
-    ]
-)
-
-# Generate bindings?
+# Generate bindings
+env.Append(BUILDERS={"GenerateBindings": Builder(action=scons_generate_bindings, emitter=scons_emit_files)})
 json_api_file = ""
 
 if "custom_api_file" in env:
@@ -459,17 +455,16 @@ if "custom_api_file" in env:
 else:
     json_api_file = os.path.join(os.getcwd(), env["headers_dir"], "extension_api.json")
 
-if env["generate_bindings"] == "auto":
-    # Check if generated files exist
-    should_generate_bindings = not os.path.isfile(os.path.join(os.getcwd(), "gen", "src", "classes", "object.cpp"))
-else:
-    should_generate_bindings = env["generate_bindings"] in ["yes", "true"]
+bindings = env.GenerateBindings(
+    env.Dir("."), [json_api_file, os.path.join(env["headers_dir"], "godot", "gdnative_interface.h")]
+)
 
-if should_generate_bindings:
-    # Actually create the bindings here
-    import binding_generator
+# Forces bindings regeneration.
+if env["generate_bindings"]:
+    AlwaysBuild(bindings)
 
-    binding_generator.generate_bindings(json_api_file, env["generate_template_get_node"])
+# Includes
+env.Append(CPPPATH=[[env.Dir(d) for d in [env["headers_dir"], "include", os.path.join("gen", "include")]]])
 
 # Sources to compile
 sources = []
@@ -477,8 +472,7 @@ add_sources(sources, "src", "cpp")
 add_sources(sources, "src/classes", "cpp")
 add_sources(sources, "src/core", "cpp")
 add_sources(sources, "src/variant", "cpp")
-add_sources(sources, "gen/src/variant", "cpp")
-add_sources(sources, "gen/src/classes", "cpp")
+sources.extend([f for f in bindings if str(f).endswith(".cpp")])
 
 env["arch_suffix"] = env["bits"]
 if env["platform"] == "android":
@@ -500,7 +494,6 @@ if env["build_library"]:
     library = env.StaticLibrary(target=env.File("bin/%s" % library_name), source=sources)
     Default(library)
 
-env.Append(CPPPATH=[env.Dir(f) for f in ["gen/include", "include", "godot-headers"]])
 env.Append(LIBPATH=[env.Dir("bin")])
 env.Append(LIBS=library_name)
 Return("env")

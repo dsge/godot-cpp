@@ -6,9 +6,9 @@ import shutil
 from pathlib import Path
 
 
-def print_file_list(api_filepath, output_dir, headers=False, sources=False):
+def get_file_list(api_filepath, output_dir, headers=False, sources=False):
     api = {}
-    end = ";"
+    files = []
     with open(api_filepath) as api_file:
         api = json.load(api_file)
 
@@ -25,9 +25,9 @@ def print_file_list(api_filepath, output_dir, headers=False, sources=False):
         header_filename = include_gen_folder / "variant" / (camel_to_snake(builtin_class["name"]) + ".hpp")
         source_filename = source_gen_folder / "variant" / (camel_to_snake(builtin_class["name"]) + ".cpp")
         if headers:
-            print(str(header_filename.as_posix()), end=end)
+            files.append(str(header_filename.as_posix()))
         if sources:
-            print(str(source_filename.as_posix()), end=end)
+            files.append(str(source_filename.as_posix()))
 
     for engine_class in api["classes"]:
         # TODO: Properly setup this singleton since it conflicts with ClassDB in the bindings.
@@ -36,21 +36,45 @@ def print_file_list(api_filepath, output_dir, headers=False, sources=False):
         header_filename = include_gen_folder / "classes" / (camel_to_snake(engine_class["name"]) + ".hpp")
         source_filename = source_gen_folder / "classes" / (camel_to_snake(engine_class["name"]) + ".cpp")
         if headers:
-            print(str(header_filename.as_posix()), end=end)
+            files.append(str(header_filename.as_posix()))
         if sources:
-            print(str(source_filename.as_posix()), end=end)
+            files.append(str(source_filename.as_posix()))
 
     utility_functions_header_path = include_gen_folder / "variant" / "utility_functions.hpp"
     utility_functions_source_path = source_gen_folder / "variant" / "utility_functions.cpp"
     global_constants_header_path = include_gen_folder / "classes" / "global_constants.hpp"
     if headers:
-        print(str(utility_functions_header_path.as_posix()), end=end)
-        print(str(global_constants_header_path.as_posix()), end=end)
+        files.append(str(utility_functions_header_path.as_posix()))
+        files.append(str(global_constants_header_path.as_posix()))
     if sources:
-        print(str(utility_functions_source_path.as_posix()), end=end)
+        files.append(str(utility_functions_source_path.as_posix()))
+    return files
 
 
-def generate_bindings(api_filepath, use_template_get_node, output_dir="."):
+def print_file_list(api_filepath, output_dir, headers=False, sources=False):
+    end = ";"
+    for f in get_file_list(api_filepath, output_dir, headers, sources):
+        print(f, end=end)
+
+
+def scons_emit_files(target, source, env):
+    files = [env.File(f) for f in get_file_list(str(source[0]), target[0].abspath, True, True)]
+    env.Clean(files, target)
+    return [target[0]] + files, source
+
+
+def scons_generate_bindings(target, source, env):
+    generate_bindings(
+        str(source[0]),
+        env["generate_template_get_node"],
+        env["bits"],
+        "double" if (env["float"] == "64") else "float",
+        target[0].abspath,
+    )
+    return None
+
+
+def generate_bindings(api_filepath, use_template_get_node, bits="64", double="float", output_dir="."):
     api = None
 
     target_dir = Path(output_dir) / "gen"
@@ -61,9 +85,11 @@ def generate_bindings(api_filepath, use_template_get_node, output_dir="."):
     shutil.rmtree(target_dir, ignore_errors=True)
     target_dir.mkdir(parents=True)
 
+    print("Built-in type config: " + double + "_" + bits)
+
     generate_global_constants(api, target_dir)
     generate_global_constant_binds(api, target_dir)
-    generate_builtin_bindings(api, target_dir, "float_64")
+    generate_builtin_bindings(api, target_dir, double + "_" + bits)
     generate_engine_classes_bindings(api, target_dir, use_template_get_node)
     generate_utility_functions(api, target_dir)
 
@@ -1132,9 +1158,13 @@ def generate_engine_class_source(class_api, used_classes, fully_used_classes, us
                         is_ref = True
                     else:
                         if method["is_static"]:
-                            method_call += f"return internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, nullptr"
+                            method_call += (
+                                f"return internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, nullptr"
+                            )
                         else:
-                            method_call += f"return internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _owner"
+                            method_call += (
+                                f"return internal::_call_native_mb_ret_obj<{return_type}>(___method_bind, _owner"
+                            )
                 else:
                     if method["is_static"]:
                         method_call += f"internal::_call_native_mb_no_ret(___method_bind, nullptr"
